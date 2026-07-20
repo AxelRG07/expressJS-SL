@@ -1,0 +1,23 @@
+# Dependencias
+node_modules/
+jspm_packages/
+
+# Variables de entorno y configuraciones sensibles
+.env
+.env.local
+.env.*.local
+
+# Archivos de log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Archivos del sistema operativo (pueden ser globales también)
+.DS_Store
+Thumbs.db
+
+# Build y coverage (si usas TypeScript o herramientas de test)
+dist/
+build/
+coverage/
