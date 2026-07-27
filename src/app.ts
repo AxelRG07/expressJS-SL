@@ -1,6 +1,12 @@
 import express from 'express';
 import type { Request, Response } from 'express';
 import fs from 'fs';
+import mongoose from 'mongoose';
+
+// Conexión a MongoDB
+mongoose.connect('mongodb://127.0.0.1:27017/practica_backend')
+  .then(() => console.log('✅ Conectado a MongoDB local'))
+  .catch((error) => console.error('❌ Error conectando a MongoDB:', error));
 
 const app = express();
 const PORT = 3002;
@@ -8,15 +14,28 @@ const PORT = 3002;
 // Mètodo que permite al servidor entender el JSON que se envía en el cuerpo de la solicitud
 app.use(express.json());
 
-interface User {
-  id: number;
+// Interfaz tipada para TypeScript
+interface IUser {
+  first_name: string;
+  last_name: string;
+  email: string;
   password?: string;
-  first_name?: string;
-  last_name?: string;
   username?: string;
-  email?: string;
   gender?: string;
 }
+
+// Esquema de validación para MongoDB
+const userSchema = new mongoose.Schema<IUser>({
+  first_name: { type: String, required: true },
+  last_name: { type: String, required: true },
+  email: { type: String, required: true },
+  password: { type: String },
+  username: { type: String },
+  gender: { type: String }
+});
+
+// Creación del Modelo (La herramienta con la que haremos el CRUD)
+const User = mongoose.model<IUser>('User', userSchema);
 
   //-------------------get-------------------------------------------
 
@@ -33,21 +52,26 @@ interface User {
 //   res.send('Hello World!!');
 // });
 
-// Modulo fs(File System) para leer y escribir archivos locales
-app.get('/users', (req: Request, res: Response) => {
-  res.send(fs.readFileSync('./data/users.json', 'utf8'));
+// 
+app.get('/users', async (req: Request, res: Response) => {
+  try {
+    const users = await User.find(); // Busca todos los documentos en la colección 'users'
+    res.status(200).json(users);
+  } catch (error) {
+    res.status(500).send('Error al obtener los usuarios');
+  }
 });
 
-app.get('/users/:id', (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  const users = JSON.parse(fs.readFileSync('./data/users.json', 'utf8'));
-  const user = users.find((user: any) => user.id === id);
-  if (user) {
-    res.send(user);
-  } else {
-    res.status(404).send('Usuario no encontrado');
+app.get('/users/:id', async (req: Request, res: Response) => {
+  try {
+    const user = await User.findById(req.params.id); // Busca el usuario por su ID
+    if(!user) {
+      return res.status(404).json({message: 'Usuario no encontrado'})
+    }
+    return res.status(200).json(user);
+  } catch (error) {
+    return res.status(400).send('ID de usuario inválido');
   }
-  return 
 });
 
 //---------------------------------post-------------------------------
@@ -57,15 +81,16 @@ app.get('/users/:id', (req: Request, res: Response) => {
 //   res.send('Got a POST request');
 // });
 
-app.post('/users', (req: Request, res: Response) => {
-  const newUser: User = req.body;
-  // Leer el archivo JSON
-  const users: User[] = JSON.parse(fs.readFileSync('./data/users.json', 'utf8'));
-  // Agregar el nuevo usuario
-  users.push(newUser);
-  // Escribir el archivo JSON
-  fs.writeFileSync('./data/users.json', JSON.stringify(users));
-  res.send(`{"Usuario ${newUser.first_name} creado correctamente"}`);
+app.post('/users', async (req: Request, res: Response) => {
+  try {
+    const newUser = await User.create(req.body); // Crea un nuevo documento en la colección 'users'
+    res.status(201).json({ 
+      mensaje: "Usuario creado exitosamente",
+      usuario: newUser 
+    });
+  } catch (error) {
+    res.status(400).send('Error al crear el usuario');
+  }
 });
 
 //-------------------------------put-------------------------------
@@ -74,22 +99,17 @@ app.post('/users', (req: Request, res: Response) => {
 //   res.send('Test PUT');
 // });
 
-app.put('/users/:id', (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  const users: User[] = JSON.parse(fs.readFileSync('./data/users.json', 'utf8'));
-  const userId = users.findIndex(u => u.id === id);
-  if (userId === -1) {
-    res.status(404).send('Usuario no encontrado');
-    return;
+app.put('/users/:id', async (req: Request, res: Response) => {
+  try {
+    const updatedUser = await User.findByIdAndUpdate(req.params.id, req.body, {new: true}); // Actualiza el usuario por su ID
+    if (!updatedUser) {
+      res.status(404).send('Usuario no encontrado');
+      return;
+    }
+    res.status(200).json({ mensaje: 'Usuario actualizado exitosamente', usuario: updatedUser });
+  } catch (error) {
+    res.status(400).send('Error al actualizar el usuario');
   }
-  const updatedUser = {
-    ...users[userId],
-    ...req.body,
-    id: id,
-  };
-  users[userId] = updatedUser;
-  fs.writeFileSync('./data/users.json', JSON.stringify(users));
-  res.send(`Usuario ${id} actualizado correctamente`);
 });
 
 
@@ -98,20 +118,20 @@ app.put('/users/:id', (req: Request, res: Response) => {
 //   res.send('Test DELETE');
 // });
 
-app.delete('/users/:id', (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  const users: User[] = JSON.parse(fs.readFileSync('./data/users.json', 'utf8'));
-  const userId = users.findIndex(user => user.id === id);
-  if (userId === -1) {
-    res.status(404).send('Usuario no encontrado');
-    return;
+app.delete('/users/:id', async (req: Request, res: Response) => {
+  try {
+    const deletedUser = await User.findByIdAndDelete(req.params.id); // Elimina el usuario por su ID
+    if (!deletedUser) {
+      res.status(404).send('Usuario no encontrado');
+      return;
+    }
+    res.status(200).json({ mensaje: 'Usuario eliminado exitosamente', usuario: `${deletedUser._id} ${deletedUser.first_name} ${deletedUser.last_name}` });
+  } catch (error) {
+    res.status(400).send('Error al eliminar el usuario');
   }
-  users.splice(userId, 1);
-  fs.writeFileSync('./data/users.json', JSON.stringify(users));
-  res.send(`Usuario ${id} eliminado correctamente`);
 });
 
-app.use('all', (req: Request, res: Response) => {
+app.use((req: Request, res: Response) => {
   res.status(404).send('Error 404: Ruta no encontrada. Esta API solo responde en /users');
 });
 
